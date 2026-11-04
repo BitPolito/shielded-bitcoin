@@ -8,6 +8,15 @@ class Note:
     Represents the private plaintext payload of a Shielded Bitcoin note.
 
     ptnote = (v, d, rseed)
+
+    Paper references:
+        - Section 5, pages 9-10: defines the note plaintext as ptnote = (v, d, rseed), including the meaning of each field.
+        - Appendix A.2, page 42: specifies an 11-byte diversifier.
+
+    Implementation checks:
+        - v must be a non-negative integer, consistently with its unsigned satoshi representation.
+        - d must be bytes of exactly 11 bytes.
+        - rseed must be bytes; no fixed length is imposed because the cited specification does not define one.
     """
 
     v: int

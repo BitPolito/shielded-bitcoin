@@ -15,6 +15,13 @@ def decode_compact_size(data: bytes, offset: int = 0) -> tuple[int, int]:
 
     Returns:
         (decoded_value, next_offset)
+
+    Paper reference:
+        - Appendix A.5, page 44: requires canonical parsing and rejection of non-minimal, shorter, longer, undecodable, or otherwise non-canonical encodings.
+
+    Implementation:
+        - Checks CompactSize prefixes, available bytes, integer bounds, and minimal representation.
+        - Offset validation and Python type checks are additional implementation safeguards.
     """
 
     if not isinstance(data, bytes):
@@ -29,17 +36,17 @@ def decode_compact_size(data: bytes, offset: int = 0) -> tuple[int, int]:
     if offset == len(data):
         raise ValueError("Insufficient data for CompactSize.")
 
-    prefix = data[offset]
+    prefix = data[offset] # Read the first byte
     offset += 1
 
     # Direct encoding: 0 to 252
     if prefix <= 252:
-        return prefix, offset
+        return prefix, offset #if prefix is 0-252, the value is the prefix itself, and we return the next offset
 
     # Determine payload size
     if prefix == 0xfd:
-        size = 2
-        minimum = 253
+        size = 2 #2 bytes
+        minimum = 253 #useful for checking in the last part
 
     elif prefix == 0xfe:
         size = 4

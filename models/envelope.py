@@ -1,12 +1,26 @@
 
 from dataclasses import dataclass
 
-@dataclass(frozen=True)
+@dataclass(frozen=True) #frozen=True makes the dataclass immutable after creation, which is important for security and integrity of the envelope data
+#it is not a problem for us in case of blockchain reorganization because in that case we will create new envelopes from the replay state, not modify the already existent ones
 class Envelope:
     """
     Represents a Shielded Bitcoin transfer envelope.
 
     e = (Body(e), proof(e))
+
+    Paper references:
+        - Section 5, pages 9-10: describes note outputs and their public representation.
+        - Section 8: defines the anchor mechanism.
+        - Section 9, page 15: defines public nullifiers.
+        - Appendix A.3, page 43: defines the logical envelope body and its ordered fields.
+        - Appendix A.3, page 43: provides concrete field sizes for the estimated 2-input/2-output implementation profile.
+
+    Implementation checks:
+        - Field types and structural consistency are enforced.
+        - The number of note ciphertexts must match the number of ephemeral public keys.
+        - Fixed byte lengths follow the concrete 2-input/2-output profile used by this implementation and must not be interpreted as universal across all possible arities.
+        - Immutability is an implementation design choice.
     """
 
     header: bytes

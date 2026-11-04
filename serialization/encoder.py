@@ -13,6 +13,12 @@
 def encode_compact_size(n: int) -> bytes:
     """
     Encode a non-negative integer using Bitcoin CompactSize.
+
+    Paper reference:
+        - Appendix A.5, page 44: specifies Bitcoin-style canonical CompactSize encoding for vector counts.
+
+    Implementation:
+        - Implements the CompactSize integer encoding and rejects values outside the unsigned 64-bit range.
     """
 
     if type(n) is not int:
