@@ -1,2 +1,2 @@
-# shielded-bitcoin-bitPolito
-A practical Python implementation of the paper "Shielded Bitcoin"
+# shielded-bitcoin-BitPolito
+A practical Python implementation for the Shielded Bitcoin protocol
