@@ -5,10 +5,10 @@ they are skipped until a curve library is plugged in.
 """
 import pytest
 
-from sbtc import params
-from sbtc.address import (Address, derive_address, derive_pk_d_from_spend,
+from key_derivation import params
+from key_derivation.address import (Address, derive_address, derive_pk_d_from_spend,
                           diversify_hash, owns_input_note, random_diversifier)
-from sbtc.keys import WalletKeys
+from key_derivation.keys import WalletKeys
 
 SEED = bytes(range(32))
 D = bytes(range(11))

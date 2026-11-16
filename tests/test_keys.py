@@ -4,9 +4,9 @@ import pickle
 
 import pytest
 
-from sbtc import params
-from sbtc.curve import ORDER, Scalar
-from sbtc.keys import SkSpend, WalletKeys, disclosure_view_keys, hkdf
+from key_derivation import params
+from key_derivation.curve import ORDER, Scalar
+from key_derivation.keys import SkSpend, WalletKeys, disclosure_view_keys, hkdf
 
 SEED = bytes(range(32))
 
