@@ -21,7 +21,7 @@ from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from . import params
 from .curve import Scalar
 
-
+#ikm stands for input key material, the input to the HKDF function, while the label are taken from params.py and are used to derive different keys from the same input key material.
 def hkdf(ikm: bytes, label: bytes) -> bytes:
     """HKDF-SHA256 with no salt and the label in the `info` parameter.
 
@@ -31,7 +31,7 @@ def hkdf(ikm: bytes, label: bytes) -> bytes:
     return HKDF(
         algorithm=hashes.SHA256(),
         length=params.KEY_LEN,
-        salt=None,
+        salt=None, #WE NEED TO CHECK HERE WHAT TO INSERT FOR SECURITY, THE PAPER SAYS NOTHING ABOUT SALT!!
         info=label,
     ).derive(ikm)
 
@@ -49,9 +49,11 @@ class _Secret:
     def to_bytes(self) -> bytes:
         return self._b
 
+    #same of Scalar in curve.py, we don't want to expose the value of the secret when printing it, so we return a redacted string instead of the actual value.
     def __repr__(self) -> str:
         return f"{type(self).__name__}(<redacted>)"
 
+    #we want to avoid side-channel attacks, so we use hmac.compare_digest to compare the bytes of the secret in constant time, avoiding timing attacks.
     def __eq__(self, other: object) -> bool:
         # Constant-time comparison.
         return type(other) is type(self) and hmac.compare_digest(
@@ -60,6 +62,7 @@ class _Secret:
 
     __hash__ = None  # type: ignore[assignment]
 
+    #avoid using pickle to serialize secrets, as it could lead to accidental exposure of sensitive information.
     def __reduce__(self):
         raise TypeError("serializing secrets is not allowed")
 
@@ -77,6 +80,7 @@ class VkIn(_Secret):
     """READ-ONLY capability: detects and decrypts received notes."""
 
     def sk_view(self) -> Scalar:
+        #with self._b we are giving in input the bytes of the VkIn, and we derive the SkView from it using HKDF with the label for view, and then we convert the resulting bytes to a Scalar.
         return Scalar.from_bytes(hkdf(self._b, params.LABEL_VIEW))
 
 
@@ -87,7 +91,7 @@ class VkOut(_Secret):
 class SkSpend:
     """Spend authority. The only object able to authorize a spend."""
 
-    __slots__ = ("_s",)
+    __slots__ = ("_s",) #only allowable attribute is _s, which is the scalar value of the SkSpend
 
     def __init__(self, scalar: Scalar):
         self._s = scalar
