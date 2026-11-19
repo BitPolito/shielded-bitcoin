@@ -47,6 +47,28 @@ def decode_envelope(data: bytes) -> Envelope:
     input_count, offset = decode_compact_size(data, offset) #here we pass the envelope data and the current offset to the decode_compact_size function, which returns the decoded input_count and the updated offset.
     output_count, offset = decode_compact_size(data, offset)
 
+
+    # Transfer arity validation
+    #
+    # IMPLEMENTATION CHOICE (Shielded Bitcoin v1):
+    # The paper requires supported arities to be defined by
+    # the deployment, but does not mandate positive counts.
+    # This profile rejects zero-input and zero-output transfers.
+    #
+    # Check immediately after decoding the canonical counts,
+    # before allocating or reading their corresponding vectors.
+
+    if input_count == 0:
+        raise ValueError(
+            "A transfer envelope must contain at least one input."
+        )
+
+    if output_count == 0:
+        raise ValueError(
+            "A transfer envelope must contain at least one output."
+        )
+
+
     # Check that enough bytes remain for the nullifiers
     if input_count > (len(data) - offset) // 32: #here we check if the number of input nullifiers specified by input_count can fit in the remaining bytes of data. Each nullifier is 32 bytes, so we divide the remaining length of data by 32 to see how many nullifiers can fit. If input_count exceeds this number, it means there are not enough bytes left to read all the nullifiers, and we raise a ValueError.
         raise ValueError("Invalid nullifier vector length.")

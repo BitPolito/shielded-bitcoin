@@ -1,6 +1,6 @@
 
 from dataclasses import dataclass
-
+from models.header import HEADER
 @dataclass(frozen=True) #frozen=True makes the dataclass immutable after creation, which is important for security and integrity of the envelope data
 #it is not a problem for us in case of blockchain reorganization because in that case we will create new envelopes from the replay state, not modify the already existent ones
 class Envelope:
@@ -40,6 +40,20 @@ class Envelope:
         if len(self.header) != 6:
             raise ValueError("Header must be exactly 6 bytes.")
 
+        # Validate the canonical protocol header.
+        # The paper defines the logical header ("btc", 1, 0x01).
+        # Our implementation encodes the version using 2 bytes
+        # (uint16 little-endian), preserving the 6-byte header
+        # assumed in Appendix A.4.
+        #
+        # Only the currently supported protocol version and
+        # transfer type are accepted.
+
+        if self.header != HEADER:
+            raise ValueError(
+                "Unsupported or invalid Shielded Bitcoin header."
+            )
+    
         # Anchor height
         if type(self.hanchor) is not int:
             raise TypeError("Anchor height must be an integer.")
@@ -57,8 +71,36 @@ class Envelope:
         if not isinstance(self.note_ciphertexts, tuple):
             raise TypeError("Note ciphertexts must be a tuple.")
 
-        # Consistent vector lengths
+        # Transfer arity validation
+        #
+        # Paper references:
+        # - Appendix A.3: defines N and M as the number of spent
+        #   input notes and newly created output notes.
+        # - Section 14.3: requires concrete deployment profiles
+        #   to define which transfer arities are supported.
+        #
+        # IMPLEMENTATION CHOICE (Shielded Bitcoin v1):
+        # The paper does not explicitly require N >= 1 or M >= 1.
+        # Our profile requires at least one input and one output,
+        # since transfer type 0x01 represents an ordinary shielded
+        # transfer, not a peg-in or peg-out operation.
+        #
+        # No maximum arity is imposed at the data-model level yet.
+        # The concrete proving system must later define which
+        # arities can actually be verified.
+
+        input_count = len(self.nullifiers)
         output_count = len(self.ephemeral_public_keys)
+
+        if input_count == 0:
+            raise ValueError(
+                "A transfer envelope must contain at least one input."
+            )
+
+        if output_count == 0:
+            raise ValueError(
+                "A transfer envelope must contain at least one output."
+            )
 
         if len(self.note_ciphertexts) != output_count:
             raise ValueError(

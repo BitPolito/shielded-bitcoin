@@ -6,10 +6,11 @@ from serialization.decoder import decode_compact_size
 from serialization.encoder import encode_envelope
 from serialization.decoder import decode_envelope
 from models.envelope import Envelope
+from models.header import HEADER
 
 def make_valid_envelope():
     return Envelope(
-        header=b"h" * 6,
+        header=HEADER,
         hanchor=100,
         nullifiers=(b"n" * 32, b"m" * 32),
         ephemeral_public_keys=(b"p" * 32, b"q" * 32),
@@ -187,3 +188,90 @@ def test_invalid_offset_rejected():
 def test_invalid_offset_type_rejected(offset):
     with pytest.raises(TypeError):
         decode_compact_size(b"\x01", offset)
+
+
+# ---------------------------------------------------------
+# Transfer arity decoding
+#
+# IMPLEMENTATION CHOICE (Shielded Bitcoin v1):
+# Zero-input and zero-output transfers are rejected
+# immediately after decoding the CompactSize counts.
+# ---------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "invalid_input_count, invalid_output_count",
+    [
+        (0, 2),
+        (2, 0),
+        (0, 0),
+    ],
+)
+def test_decoder_rejects_zero_arities(
+    invalid_input_count,
+    invalid_output_count,
+):
+    envelope = make_valid_envelope()
+    encoded = encode_envelope(envelope)
+
+    # The header occupies bytes 0-5.
+    # The anchor occupies bytes 6-9.
+    # N and M are stored at offsets 10 and 11 because
+    # the fixture uses counts below 253 (one byte each).
+
+    malformed = (
+        encoded[:10]
+        + encode_compact_size(invalid_input_count)
+        + encode_compact_size(invalid_output_count)
+        + encoded[12:]
+    )
+
+    with pytest.raises(ValueError):
+        decode_envelope(malformed)
+
+
+@pytest.mark.parametrize(
+    "input_count, output_count",
+    [
+        (1, 1),
+        (1, 2),
+        (2, 1),
+        (3, 3),
+        (3, 5),
+        (5, 3),
+    ],
+)
+def test_envelope_round_trip_variable_arities(
+    input_count,
+    output_count,
+):
+    from dataclasses import replace
+
+    envelope = make_valid_envelope()
+
+    modified = replace(
+        envelope,
+        nullifiers=tuple(
+            bytes([i % 256]) * 32
+            for i in range(input_count)
+        ),
+        ephemeral_public_keys=tuple(
+            bytes([i % 256]) * 32
+            for i in range(output_count)
+        ),
+        note_ciphertexts=tuple(
+            bytes([i % 256]) * 67
+            for i in range(output_count)
+        ),
+        recovery_ciphertext=(
+            b"\x01" * (64 * output_count + 16)
+        ),
+    )
+
+    encoded = encode_envelope(modified)
+    decoded = decode_envelope(encoded)
+
+    assert decoded == modified
+    assert decoded.input_count == input_count
+    assert decoded.output_count == output_count
+    assert encode_envelope(decoded) == encoded

@@ -28,6 +28,7 @@ def encode_envelope(envelope: Envelope) -> bytes:
     encoded.extend(envelope.header)  #the function extend is used to append the bytes of the header to the encoded bytearray. The header is expected to be a 6-byte field, as specified in the serialization rules.
     encoded.extend(envelope.hanchor.to_bytes(4, byteorder="little")) #from the hanchor we convert the integer value to a 4-byte little-endian and then we append it to the encoded bytearray.
 
+    #while in decoder we decided as soon as possible to check if input and ouptu count are valid (at the moment this means that both must be major than 0), here we do not check this because we assume that the envelope has already been validated before being passed to the encoder. This is a design choice that assumes that the encoder will only be used with valid Envelope instances, and that any necessary validation has already been performed before calling this function.
     # Vector counts
     encoded.extend(encode_compact_size(envelope.input_count)) #we append input and output counts using the function defined below, to encode in BTC CompactSize
     encoded.extend(encode_compact_size(envelope.output_count))

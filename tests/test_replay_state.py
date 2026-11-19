@@ -5,16 +5,16 @@ from dataclasses import FrozenInstanceError
 from models.leaf import Leaf
 from models.envelope import Envelope
 from models.replay_state import ReplayState
-
+from models.header import HEADER
 
 def make_valid_envelope():
     return Envelope(
-        header=b"h" * 6,
+        header=HEADER,
         hanchor=100,
-        nullifiers=(),
-        ephemeral_public_keys=(),
-        note_ciphertexts=(),
-        recovery_ciphertext=b"r" * 16,
+        nullifiers=(b"n" * 32,),
+        ephemeral_public_keys=(b"k" * 32,),
+        note_ciphertexts=(b"c" * 67,),
+        recovery_ciphertext=b"r" * 80,
         proof=b"p" * 192,
     )
 
