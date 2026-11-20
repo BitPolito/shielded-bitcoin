@@ -180,6 +180,87 @@ def test_decode_compact_size_with_offset():
     assert next_offset == 4
 
 
+# ---------------------------------------------------------
+# CompactSize boundary and canonicality tests
+#
+# Paper reference:
+# - Appendix A.5: vector counts must use canonical
+#   Bitcoin-style CompactSize encoding.
+#
+# These tests verify the transition boundaries between
+# the four CompactSize encoding formats.
+# ---------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "value, expected",
+    [
+        (251, b"\xfb"),
+        (254, b"\xfd\xfe\x00"),
+        (65534, b"\xfd\xfe\xff"),
+        (65537, b"\xfe\x01\x00\x01\x00"),
+        (2**32 - 2, b"\xfe\xfe\xff\xff\xff"),
+        (2**32 - 1, b"\xfe\xff\xff\xff\xff"),
+        (2**32 + 1, b"\xff\x01\x00\x00\x00\x01\x00\x00\x00"),
+        (2**64 - 1, b"\xff" + b"\xff" * 8),
+    ],
+)
+def test_compact_size_additional_boundaries(value, expected):
+    encoded = encode_compact_size(value)
+
+    assert encoded == expected
+
+    decoded, offset = decode_compact_size(encoded)
+
+    assert decoded == value
+    assert offset == len(encoded)
+
+
+@pytest.mark.parametrize(
+    "encoded",
+    [
+        b"\xfd\x00\x00",                  # 0 in 3 bytes
+        b"\xfd\xfc\x00",                  # 252 in 3 bytes
+        b"\xfe\xfd\x00\x00\x00",          # 253 in 5 bytes
+        b"\xfe\xff\xff\x00\x00",          # 65535 in 5 bytes
+        b"\xff\x00\x00\x01\x00\x00\x00\x00\x00",  # 65536 in 9 bytes
+        b"\xff\xff\xff\xff\xff\x00\x00\x00\x00",  # 2^32-1 in 9 bytes
+    ],
+)
+def test_compact_size_rejects_additional_non_minimal_encodings(encoded):
+    with pytest.raises(ValueError):
+        decode_compact_size(encoded)
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        0,
+        1,
+        251,
+        252,
+        253,
+        254,
+        65534,
+        65535,
+        65536,
+        65537,
+        2**32 - 1,
+        2**32,
+        2**32 + 1,
+        2**64 - 1,
+    ],
+)
+def test_compact_size_round_trip_boundaries(value):
+    encoded = encode_compact_size(value)
+
+    decoded, offset = decode_compact_size(encoded)
+
+    assert decoded == value
+    assert offset == len(encoded)
+    assert encode_compact_size(decoded) == encoded
+
+
 def test_invalid_offset_rejected():
     with pytest.raises(ValueError):
         decode_compact_size(b"\x01", offset=2)
@@ -275,3 +356,126 @@ def test_envelope_round_trip_variable_arities(
     assert decoded.input_count == input_count
     assert decoded.output_count == output_count
     assert encode_envelope(decoded) == encoded
+
+
+# ---------------------------------------------------------
+# Malformed envelope parsing tests
+#
+# Paper reference:
+# - Appendix A.5: the parser must reject truncated,
+#   non-canonical and structurally inconsistent encodings.
+#
+# These tests verify that the decoder rejects malformed
+# payloads before constructing an invalid Envelope.
+# ---------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "truncation_offset",
+    [
+        0,    # Empty payload
+        1,    # Incomplete header
+        5,    # Incomplete header
+        6,    # Missing anchor
+        9,    # Incomplete anchor
+        10,   # Missing N and M
+        11,   # Missing M
+        12,   # Missing vectors
+        20,   # Incomplete nullifier vector
+        80,   # Incomplete ephemeral key vector
+        150,  # Incomplete note ciphertext vector
+        400,  # Incomplete recovery ciphertext
+        609,  # Incomplete proof
+    ],
+)
+def test_decoder_rejects_truncation_at_multiple_offsets(
+    truncation_offset,
+):
+    envelope = make_valid_envelope()
+    encoded = encode_envelope(envelope)
+
+    # Every truncated prefix must be rejected.
+    malformed = encoded[:truncation_offset]
+
+    with pytest.raises(ValueError):
+        decode_envelope(malformed)
+
+
+@pytest.mark.parametrize(
+    "declared_input_count, declared_output_count",
+    [
+        (3, 2),   # One additional input declared
+        (2, 3),   # One additional output declared
+        (5, 5),   # More inputs and outputs declared
+        (10, 1),  # Excessive input count
+        (1, 10),  # Excessive output count
+    ],
+)
+def test_decoder_rejects_inconsistent_vector_counts(
+    declared_input_count,
+    declared_output_count,
+):
+    envelope = make_valid_envelope()
+    encoded = encode_envelope(envelope)
+
+    # The fixture uses N = 2 and M = 2.
+    # Both counts occupy one byte at offsets 10 and 11.
+    #
+    # We modify the declared counts without adding the
+    # corresponding vector elements.
+
+    malformed = (
+        encoded[:10]
+        + encode_compact_size(declared_input_count)
+        + encode_compact_size(declared_output_count)
+        + encoded[12:]
+    )
+
+    with pytest.raises(ValueError):
+        decode_envelope(malformed)
+
+
+@pytest.mark.parametrize(
+    "large_count",
+    [
+        253,
+        65536,
+        2**32,
+        2**64 - 1,
+    ],
+)
+@pytest.mark.parametrize(
+    "count_field",
+    ["input", "output"],
+)
+def test_decoder_rejects_oversized_declared_vectors(
+    large_count,
+    count_field,
+):
+    envelope = make_valid_envelope()
+    encoded = encode_envelope(envelope)
+
+    # Canonically encode an extremely large count,
+    # while leaving the actual payload unchanged.
+    #
+    # The decoder must reject the inconsistency
+    # without attempting to allocate such vectors.
+
+    if count_field == "input":
+        malformed = (
+            encoded[:10]
+            + encode_compact_size(large_count)
+            + encode_compact_size(2)
+            + encoded[12:]
+        )
+    else:
+        malformed = (
+            encoded[:10]
+            + encode_compact_size(2)
+            + encode_compact_size(large_count)
+            + encoded[12:]
+        )
+
+    with pytest.raises(ValueError):
+        decode_envelope(malformed)
+
